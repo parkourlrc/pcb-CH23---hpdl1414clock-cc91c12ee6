@@ -1,7 +1,8 @@
 from machine import Pin
 import network
-import ntptime
 import time
+import requests
+import re
 import os
 
 A0 = Pin(7, Pin.OUT)
@@ -25,12 +26,6 @@ WR7.value(1)
 
 network.country('NL')
 
-timezone_offset = 1* 3600
-months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"]
-
-last_called = 0
-interval = 3600  # 1 hour in seconds, so check NTP every hour.
-
 chartable = {
     " ":0b0100000,
     "!":0b0100001,
@@ -42,6 +37,8 @@ chartable = {
     "'":0b0100111,
     "<":0b0101000,
     ">":0b0101001,
+    "(":0b0101000,
+    ")":0b0101001,
     "*":0b0101010,
     "+":0b0101011,
     ",":0b0101100,
@@ -70,6 +67,7 @@ chartable = {
     "c":0b1000011,
     "d":0b1000100,
     "e":0b1000101,
+    "&euml;":0b1000101,
     "f":0b1000110,
     "g":0b1000111,
     "h":0b1001000,
@@ -91,6 +89,33 @@ chartable = {
     "x":0b1011000,
     "y":0b1011001,
     "z":0b1011010,
+    "A":0b1000001,
+    "B":0b1000010,
+    "C":0b1000011,
+    "D":0b1000100,
+    "E":0b1000101,
+    "&EUML;":0b1000101,
+    "F":0b1000110,
+    "G":0b1000111,
+    "H":0b1001000,
+    "I":0b1001001,
+    "J":0b1001010,
+    "K":0b1001011,
+    "L":0b1001100,
+    "M":0b1001101,
+    "N":0b1001110,
+    "O":0b1001111,    
+    "P":0b1010000,
+    "Q":0b1010001,
+    "R":0b1010010,
+    "S":0b1010011,
+    "T":0b1010100,
+    "U":0b1010101,
+    "V":0b1010110,
+    "W":0b1010111,
+    "X":0b1011000,
+    "Y":0b1011001,
+    "Z":0b1011010,
     "[":0b1011011,
     "\\":0b1011100,
     "]":0b1011101,
@@ -98,37 +123,57 @@ chartable = {
     "_":0b1011111,  
     }
 
-
 def letter(inputchar,position):
     lettercode=chartable[inputchar.lower()]
     display = position // 4
     position = position % 4
     position = 3 - position
-    
     for i in range(0,7):
         value=(lettercode>>i)&1
         D=Pin(i, Pin.OUT)
         D.value(value)
-        
     A0.value(position & 1)
     A1.value((position >> 1) & 1)
-    
     screen=Pin((display + 9), Pin.OUT)
     screen.value(0)
     time.sleep_us(1)
     screen.value(1)
     time.sleep_us(1)
-        
+
 def printstring(text,startingposition):
-#    print(text)
     for i, char in enumerate(text):
         currentposition = startingposition+i
         if currentposition > 31:
             return
         letter(char, currentposition)
 
+class TextScroller:
+    def __init__(self, delay):
+        self.delay = delay
+        self.characters = ""
+        self.max_position = 31
+
+    def scroll_text(self,text):
+        fill_ratio = len(self.characters) + 1
+        scroll_position = (self.max_position - len(self.characters))
+        print("fill and position" ,fill_ratio,scroll_position)
+        lower_window = 0
+        new_text = self.characters + text
+
+        for i in range(0, len(text)):
+            temp_text = new_text[lower_window:fill_ratio]
+            printstring(temp_text, scroll_position)
+            fill_ratio += 1
+            if scroll_position == 0:
+                lower_window += 1
+            else:
+                scroll_position -= 1
+            time.sleep_us(self.delay)
+        self.characters = text[-self.max_position:]
+
 def clearscreen():
-    printstring("                                ",0)
+#    printstring("                                ",0)
+    printstring(" *** NOS TELETEKST PAGINA 101:  ",0)
 
 # 2: 'Link NoIP',
 # 1: 'Link Join',
@@ -137,361 +182,62 @@ def clearscreen():
 # -2: 'NoNet',
 # -3: 'BadAuth'
 
-NETWORKS = [["SSID", "PASSWORD"]]
+def readWebsiteData():
+    response = requests.get(url='https://teletekst-data.nos.nl/json/101/')
+    matches = []
+    regex = r'<span class=\\"cyan \\">([^<]+?)<'
+    match = re.search(regex, response.content)
+    print("match", match)
+    max_news = 18
+    if match is None:
+        response.close()
+        return "Oepsie foutje"
+    text = match.groups()[0]
+    matches.append(text)
+    print("matches", matches)
+    while max_news > 0:
+        next_pos = response.content.find(text)
+        match = re.search(regex, response.content[next_pos+len(text):])
+        if match:
+            text = match.groups()[0]
+# replace characters here, probably?
+            print(text)
+            for x in range(len(text)):
+                try:
+                    if chartable[chr(text[x])] > 0:
+                        pass
+                except:
+                    print(f"Unsupported char found {chr(text[x])}")
+                    z = chr(text[x]).encode('ascii')
+                    text = text.replace(z,b' ')
 
-# def connect_to_wifi():
-#     network_id = 0
-#     wlan = network.WLAN(network.STA_IF)
-#     wlan.active(False)
-#     wlan.active(True)
-#     #printstring("connecting to wifi", wlan.status(),0)
-#     #printstring("con?",0)
-#     while not wlan.isconnected():
-#         status = wlan.status()
-#         try:
-#             cur_network = NETWORKS[network_id]
-#             print("connecting to", cur_network[0])
-#             if cur_network[1] != "":
-#                 wlan.connect(cur_network[0])
-#             else:
-#                 wlan.connect(cur_network[0], cur_network[1])
-#             time.sleep(2)
-#             print("stat", status)
-#             status = wlan.status()
-#             while status == 1:
-#                 printstring("connecting to wifi",0)
-#                 print("connecting...", status)
-#                 time.sleep(1)
-#                 status = wlan.status()
-#         except:
-#             print("err")
-#         finally:
-#             if wlan.isconnected():
-#                 printstring("connected to wifi",0)
-#                 print("connected to", cur_network[0])
-#                 break
-#             else:
-#                 printstring("connection failed",0)
-#                 print("connecting failed", status)
-#                 wlan.disconnect()
-#                 time.sleep(4)
-#                 network_id = (network_id+1)%len(NETWORKS)
-#                 print("now trying", NETWORKS[network_id])
-#     print("connected to wifi?")
+            matches.append(text)
+        else:
+            break
+        max_news -= 1
+    response.close()
+    return b' *** '.join(matches).decode() + 32 * ' '
 
 def do_connect():
     wlan = network.WLAN(network.STA_IF)
     wlan.active(False)
     wlan.active(True)
     if not wlan.isconnected():
+        clearscreen()
         print('connecting to network...')
-        printstring("connecting to wifi test",0)
-        wlan.connect('ssid', 'password')
+        printstring("      connecting to wifi...     ",0)
+        wlan.connect('SSID', 'PASSWORD')
         while not wlan.isconnected():
             machine.idle()
     print('network config:', wlan.ifconfig())
-    
-def is_dst_europe(year, month, day, hour):
-    """
-    Determine if the given date and time is within European DST.
-    DST in Europe:
-        - Begins last Sunday of March at 1:00 UTC
-        - Ends last Sunday of October at 1:00 UTC
-    """
-    def last_sunday(year, month):
-        # Calculate the last Sunday of a given month and year
-        for day in range(31, 24, -1):
-            try:
-                date = time.localtime(time.mktime((year, month, day, 0, 0, 0, 0, 0, 0)))
-                if date[6] == 6:  # 6 is Sunday
-                    return day
-            except:
-                continue
-        return 31  # Default if unable to calculate (shouldn't happen)
 
-    march_last_sunday = last_sunday(year, 3)
-    october_last_sunday = last_sunday(year, 10)
-
-    # DST begins from last Sunday of March at 1:00 UTC to last Sunday of October at 1:00 UTC
-    start_dst = time.mktime((year, 3, march_last_sunday, 1, 0, 0, 0, 0, 0))
-    end_dst = time.mktime((year, 10, october_last_sunday, 1, 0, 0, 0, 0, 0))
-
-    current_time = time.mktime((year, month, day, hour, 0, 0, 0, 0, 0))
-    return start_dst <= current_time < end_dst
-
-def get_local_time():
-    """
-    Returns the local time with DST adjustment for Europe.
-    """
-    local_time_in_seconds = time.mktime(time.localtime()) + timezone_offset
-    local_time = time.localtime(local_time_in_seconds)
-    year, month, day, hour, minute, second, _, _= local_time
-
-    if is_dst_europe(year, month, day, hour):
-        hour += 1  # Add 1 hour for DST
-    return (year, month, day, hour, minute, second)
- 
-def clock():
-    separator = " "
-    current_time = get_local_time()  # Get the local time
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} 1".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} /".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} -".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} \\".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    
-    separator = ":"
-    current_time = get_local_time()  # Get the local time
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} 1".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} /".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} -".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} \\".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-
-    separator = ":"
-    current_time = get_local_time()  # Get the local time
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} 1".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} /".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} -".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} \\".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-def ntp_sync():
-    ntpsync=0
-    tries=0
-    global last_called
-    while not ntpsync:
-        try:
-            ntptime.settime()  # This will set the time on the Pico W
-            print("succesfull NTP")
-            printstring("        Time has started.       ",0)
-            ntpsync=1
-            last_called = time.mktime(time.localtime())
-        except Exception as e:  # Catch all exceptions
-            print(f"An error occurred: {e}")
-            printstring("        Time has stopped.       ",0)
-            wlan = network.WLAN(network.STA_IF)
-            if wlan.isconnected():
-                tries=tries+1
-                time.sleep(1)
-                if tries>8:
-                    machine.reset()
-            else:
-                do_connect()
-
-def check_and_run():
-    global last_called
-    current_time = time.time()  # Get the current time in seconds
-    # Check if the elapsed time since the last call is greater than the interval
-    if current_time - last_called >= interval:
-        ntp_sync()          # Call the function
-
-#connect_to_wifi()
 do_connect()
-printstring("       HPDL1414 klok v3.5       ",0)
-time.sleep(1)
-printstring("   Ontworpen door CH23 en Bas   ",0)
 time.sleep(0.5)
-ntp_sync()
-#printstring(("IP is:" ip()),0)
 time.sleep(1)
-clearscreen()      
-      
-while 1:
- check_and_run()
- clock()
+clearscreen()
 
-# duur = 100000
-# while 1:
-#     printstring("                                ",0)
-#     time.sleep_us(duur)
-#     printstring("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",0)
-#     time.sleep_us(duur)
-#     printstring('""""""""""""""""""""""""""""""""',0)
-#     time.sleep_us(duur)
-#     printstring("################################",0)
-#     time.sleep_us(duur)
-#     printstring("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$",0)
-#     time.sleep_us(duur)
-#     printstring("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",0)
-#     time.sleep_us(duur)
-#     printstring("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",0)
-#     time.sleep_us(duur)
-#     printstring("''''''''''''''''''''''''''''''''",0)
-#     time.sleep_us(duur)
-#     printstring("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",0)
-#     time.sleep_us(duur)
-#     printstring(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",0)
-#     time.sleep_us(duur)
-#     printstring("********************************",0)
-#     time.sleep_us(duur)
-#     printstring("++++++++++++++++++++++++++++++++",0)
-#     time.sleep_us(duur)
-#     printstring(",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",0)
-#     time.sleep_us(duur)
-#     printstring("--------------------------------",0)
-#     time.sleep_us(duur)
-#     printstring("................................",0)
-#     time.sleep_us(duur)
-#     printstring("////////////////////////////////",0)
-#     time.sleep_us(duur)
-#     printstring("00000000000000000000000000000000",0)
-#     time.sleep_us(duur)
-#     printstring("11111111111111111111111111111111",0)
-#     time.sleep_us(duur)
-#     printstring("22222222222222222222222222222222",0)
-#     time.sleep_us(duur)
-#     printstring("33333333333333333333333333333333",0)
-#     time.sleep_us(duur)
-#     printstring("44444444444444444444444444444444",0)
-#     time.sleep_us(duur)
-#     printstring("55555555555555555555555555555555",0)
-#     time.sleep_us(duur)
-#     printstring("66666666666666666666666666666666",0)
-#     time.sleep_us(duur)
-#     printstring("77777777777777777777777777777777",0)
-#     time.sleep_us(duur)
-#     printstring("88888888888888888888888888888888",0)
-#     time.sleep_us(duur)
-#     printstring("99999999999999999999999999999999",0)
-#     time.sleep_us(duur)
-#     printstring("::::::::::::::::::::::::::::::::",0)
-#     time.sleep_us(duur)
-#     printstring(";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;",0)
-#     time.sleep_us(duur)
-#     printstring("{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{",0)
-#     time.sleep_us(duur)
-#     printstring("================================",0)
-#     time.sleep_us(duur)
-#     printstring("}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}",0)
-#     time.sleep_us(duur)
-#     printstring("????????????????????????????????",0)
-#     time.sleep_us(duur)
-#     printstring("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",0)
-#     time.sleep_us(duur)
-#     printstring("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",0)
-#     time.sleep_us(duur)
-#     printstring("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",0)
-#     time.sleep_us(duur)
-#     printstring("cccccccccccccccccccccccccccccccc",0)
-#     time.sleep_us(duur)
-#     printstring("dddddddddddddddddddddddddddddddd",0)
-#     time.sleep_us(duur)
-#     printstring("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",0)
-#     time.sleep_us(duur)
-#     printstring("ffffffffffffffffffffffffffffffff",0)
-#     time.sleep_us(duur)
-#     printstring("gggggggggggggggggggggggggggggggg",0)
-#     time.sleep_us(duur)
-#     printstring("hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",0)
-#     time.sleep_us(duur)
-#     printstring("iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",0)
-#     time.sleep_us(duur)
-#     printstring("jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",0)
-#     time.sleep_us(duur)
-#     printstring("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",0)
-#     time.sleep_us(duur)
-#     printstring("llllllllllllllllllllllllllllllll",0)
-#     time.sleep_us(duur)
-#     printstring("mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",0)
-#     time.sleep_us(duur)
-#     printstring("nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",0)
-#     time.sleep_us(duur)
-#     printstring("oooooooooooooooooooooooooooooooo",0)
-#     time.sleep_us(duur)
-#     printstring("pppppppppppppppppppppppppppppppp",0)
-#     time.sleep_us(duur)
-#     printstring("qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",0)
-#     time.sleep_us(duur)
-#     printstring("rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",0)
-#     time.sleep_us(duur)
-#     printstring("ssssssssssssssssssssssssssssssss",0)
-#     time.sleep_us(duur)
-#     printstring("tttttttttttttttttttttttttttttttt",0)
-#     time.sleep_us(duur)
-#     printstring("uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",0)
-#     time.sleep_us(duur)
-#     printstring("vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",0)
-#     time.sleep_us(duur)
-#     printstring("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww",0)
-#     time.sleep_us(duur)
-#     printstring("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",0)
-#     time.sleep_us(duur)
-#     printstring("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",0)
-#     time.sleep_us(duur)
-#     printstring("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",0)
-#     time.sleep_us(duur)
-#     printstring("[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[",0)
-#     time.sleep_us(duur)
-#     printstring("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\",0)
-#     time.sleep_us(duur)
-#     printstring("]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",0)
-#     time.sleep_us(duur)
-#     printstring("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",0)
-#     time.sleep_us(duur)
-#     printstring("________________________________",0)
-#     time.sleep_us(duur)
+while 1:
+
+    teletekst = TextScroller(70000)
+    teletekst.scroll_text(readWebsiteData())
+    clearscreen()
