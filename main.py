@@ -3,6 +3,7 @@ import network
 import ntptime
 import time
 import os
+from datetime import datetime, timedelta, timezone
 
 A0 = Pin(7, Pin.OUT)
 A1 = Pin(8, Pin.OUT)
@@ -79,7 +80,7 @@ chartable = {
     "l":0b1001100,
     "m":0b1001101,
     "n":0b1001110,
-    "o":0b1001111,    
+    "o":0b1001111,
     "p":0b1010000,
     "q":0b1010001,
     "r":0b1010010,
@@ -95,7 +96,7 @@ chartable = {
     "\\":0b1011100,
     "]":0b1011101,
     "^":0b1011110,
-    "_":0b1011111,  
+    "_":0b1011111,
     }
 
 
@@ -104,23 +105,21 @@ def letter(inputchar,position):
     display = position // 4
     position = position % 4
     position = 3 - position
-    
+
     for i in range(0,7):
         value=(lettercode>>i)&1
         D=Pin(i, Pin.OUT)
         D.value(value)
-        
+
     A0.value(position & 1)
     A1.value((position >> 1) & 1)
-    
     screen=Pin((display + 9), Pin.OUT)
     screen.value(0)
     time.sleep_us(1)
     screen.value(1)
     time.sleep_us(1)
-        
+
 def printstring(text,startingposition):
-#    print(text)
     for i, char in enumerate(text):
         currentposition = startingposition+i
         if currentposition > 31:
@@ -137,60 +136,18 @@ def clearscreen():
 # -2: 'NoNet',
 # -3: 'BadAuth'
 
-NETWORKS = [["SSID", "PASSWORD"]]
-
-# def connect_to_wifi():
-#     network_id = 0
-#     wlan = network.WLAN(network.STA_IF)
-#     wlan.active(False)
-#     wlan.active(True)
-#     #printstring("connecting to wifi", wlan.status(),0)
-#     #printstring("con?",0)
-#     while not wlan.isconnected():
-#         status = wlan.status()
-#         try:
-#             cur_network = NETWORKS[network_id]
-#             print("connecting to", cur_network[0])
-#             if cur_network[1] != "":
-#                 wlan.connect(cur_network[0])
-#             else:
-#                 wlan.connect(cur_network[0], cur_network[1])
-#             time.sleep(2)
-#             print("stat", status)
-#             status = wlan.status()
-#             while status == 1:
-#                 printstring("connecting to wifi",0)
-#                 print("connecting...", status)
-#                 time.sleep(1)
-#                 status = wlan.status()
-#         except:
-#             print("err")
-#         finally:
-#             if wlan.isconnected():
-#                 printstring("connected to wifi",0)
-#                 print("connected to", cur_network[0])
-#                 break
-#             else:
-#                 printstring("connection failed",0)
-#                 print("connecting failed", status)
-#                 wlan.disconnect()
-#                 time.sleep(4)
-#                 network_id = (network_id+1)%len(NETWORKS)
-#                 print("now trying", NETWORKS[network_id])
-#     print("connected to wifi?")
-
 def do_connect():
     wlan = network.WLAN(network.STA_IF)
     wlan.active(False)
     wlan.active(True)
     if not wlan.isconnected():
         print('connecting to network...')
-        printstring("connecting to wifi test",0)
-        wlan.connect('ssid', 'password')
+        printstring("       connecting to wifi       ",0)
+        wlan.connect('SSID', 'Password')
         while not wlan.isconnected():
             machine.idle()
     print('network config:', wlan.ifconfig())
-    
+
 def is_dst_europe(year, month, day, hour):
     """
     Determine if the given date and time is within European DST.
@@ -227,99 +184,47 @@ def get_local_time():
     local_time = time.localtime(local_time_in_seconds)
     year, month, day, hour, minute, second, _, _= local_time
 
+# Add 1 hour for DST - BUT NOT AT 23:00
     if is_dst_europe(year, month, day, hour):
-        hour += 1  # Add 1 hour for DST
+    	if hour == 23:
+		hour = 00
+	else:
+              hour += 1
     return (year, month, day, hour, minute, second)
- 
-def clock():
-    separator = " "
-    current_time = get_local_time()  # Get the local time
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} 1".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} /".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} -".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} \\".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    
-    separator = ":"
-    current_time = get_local_time()  # Get the local time
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} 1".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} /".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} -".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} \\".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
 
+def convert_to_beats():
+# timezone = X of Y waarbij DST belangrijk is
+# if DST = 1 then timezone = 1
+# else if DST = 0 then timezone = 2 ofzo
+    h, m, s = time.localtime()[3:6]
+    ih = int(h)
+    im = int(m)
+    ints = int(s)
+    beats = ((h * 3600) + (m * 60) + s + 1) / 86.4 # die laatste +1 is tijdzone. werkt dus niet in wintertijd
+    if beats > 1000:
+        beats -= 1000
+    elif beats < 0:
+        beats += 1000
+
+    return beats
+
+def clock():
+
+    utc_plus_1 = timezone(timedelta(hours=1)) #GMT+1 timezone
+    anim = ["1","/","-","\\"]
     separator = ":"
-    current_time = get_local_time()  # Get the local time
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} 1".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = ":"
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} /".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} -".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
-    separator = " "
-    formatted_time = " It is now {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} \\".format(
-    current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2]
-    )
-    time.sleep_us(50000)
-    printstring(formatted_time,0)
-    
+    i = 0
+    while True:
+        current_time = get_local_time()  # Get the local time
+	sit = int(convert_to_beats())
+        formatted_time = "{}{}{} @{:03d} {:02d}{}{:02d}{}{:02d} {}-{:02d}-{:02d} {}{}{}".format(
+        anim[i],anim[i],anim[i], sit, current_time[3], separator, current_time[4], separator, current_time[5], current_time[0], current_time[1], current_time[2] ,anim[i],anim[i],anim[i]
+        )
+        time.sleep_us(50000)
+        printstring(formatted_time,0)
+        print(formatted_time)
+        i = (i + 1) % len(anim)
+
 def ntp_sync():
     ntpsync=0
     tries=0
@@ -359,8 +264,8 @@ time.sleep(0.5)
 ntp_sync()
 #printstring(("IP is:" ip()),0)
 time.sleep(1)
-clearscreen()      
-      
+clearscreen()
+
 while 1:
  check_and_run()
  clock()
