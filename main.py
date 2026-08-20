@@ -77,7 +77,7 @@ chartable = {
     "l":0b1001100,
     "m":0b1001101,
     "n":0b1001110,
-    "o":0b1001111,    
+    "o":0b1001111,
     "p":0b1010000,
     "q":0b1010001,
     "r":0b1010010,
@@ -104,7 +104,7 @@ chartable = {
     "L":0b1001100,
     "M":0b1001101,
     "N":0b1001110,
-    "O":0b1001111,    
+    "O":0b1001111,
     "P":0b1010000,
     "Q":0b1010001,
     "R":0b1010010,
@@ -120,7 +120,7 @@ chartable = {
     "\\":0b1011100,
     "]":0b1011101,
     "^":0b1011110,
-    "_":0b1011111,  
+    "_":0b1011111,
     }
 
 def letter(inputchar,position):
@@ -156,7 +156,6 @@ class TextScroller:
     def scroll_text(self,text):
         fill_ratio = len(self.characters) + 1
         scroll_position = (self.max_position - len(self.characters))
-        print("fill and position" ,fill_ratio,scroll_position)
         lower_window = 0
         new_text = self.characters + text
 
@@ -172,8 +171,8 @@ class TextScroller:
         self.characters = text[-self.max_position:]
 
 def clearscreen():
-#    printstring("                                ",0)
-    printstring(" *** NOS TELETEKST PAGINA 101:  ",0)
+    printstring("                                ",0)
+#    printstring(" *** NOS TELETEKST PAGINA 101:  ",0)
 
 # 2: 'Link NoIP',
 # 1: 'Link Join',
@@ -185,23 +184,21 @@ def clearscreen():
 def readWebsiteData():
     response = requests.get(url='https://teletekst-data.nos.nl/json/101/')
     matches = []
-    regex = r'<span class=\\"cyan \\">([^<]+?)<'
+    regex = r'<span class=\\"cyan \\">\ ([^<]+?)<'
     match = re.search(regex, response.content)
-    print("match", match)
     max_news = 18
     if match is None:
         response.close()
-        return "Oepsie foutje"
+        return "       something is wrong       "
     text = match.groups()[0]
     matches.append(text)
-    print("matches", matches)
     while max_news > 0:
         next_pos = response.content.find(text)
         match = re.search(regex, response.content[next_pos+len(text):])
         if match:
             text = match.groups()[0]
 # replace characters here, probably?
-            print(text)
+            print("match", text)
             for x in range(len(text)):
                 try:
                     if chartable[chr(text[x])] > 0:
@@ -226,7 +223,7 @@ def do_connect():
         clearscreen()
         print('connecting to network...')
         printstring("      connecting to wifi...     ",0)
-        wlan.connect('SSID', 'PASSWORD')
+        wlan.connect('SSID', 'Password')
         while not wlan.isconnected():
             machine.idle()
     print('network config:', wlan.ifconfig())
